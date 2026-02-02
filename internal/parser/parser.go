@@ -7,10 +7,10 @@ type LogEntry struct {
 	Data       interface{}            `json:"data"`
 	WorldState map[string]interface{} `json:"w-state"`
 	ID         int                    `json:"id"`
-	Version
+	Version    string                 `json:"s-ver"`
 }
 
-//Filters logs by given ckey. Returns slice of LogEntry and error if any.
+// Filters logs by given ckey. Returns slice of LogEntry and error if any.
 func FilterByCkey(filename string, ckey string) ([]LogEntry, error) {
 	//TODO: Open log files.
 	//TODO: Go through each line, parse JSON, check if ckey matches. If yes, append to result slice.

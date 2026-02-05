@@ -40,16 +40,16 @@ const banner = `
                                                         @@@@@@                                      
                                                                                                     
 
-Hack the Gibson. Hack the Planet!
 `
 
 func main() {
-	fmt.Printf(banner)
+	fmt.Print(banner)
 	fmt.Println("Welcome to Echelon - SS13 Log Analysis Tool")
 
 	ckey := "beypazarifan"
-
-	results, err := parser.FilterByCkey()
+	// cwd, _ := os.Getwd()
+	// fmt.Println("Current working directory:", cwd)
+	results, err := parser.FilterByCkey("attack.log.json", ckey)
 	if err != nil {
 		fmt.Println("Error filtering logs:", err)
 		return
@@ -69,5 +69,5 @@ func main() {
 		fmt.Fprintf(outputFile, "[%s] %s\n", entry.Timestamp, entry.Message)
 	}
 
-	fmt.Printf("Results written to %s\n", "filtered_%s.log\n", ckey)
+	fmt.Printf("Results written to filtered_%s.log\n", ckey)
 }

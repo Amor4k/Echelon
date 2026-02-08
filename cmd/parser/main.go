@@ -46,10 +46,15 @@ func main() {
 	fmt.Print(banner)
 	fmt.Println("Welcome to Echelon - SS13 Log Analysis Tool")
 
+	//This part is for testing the parser. Will implement CLI/UI options later.
+	//==============================
+	filenames := []string{"attack.log.json", "game.log.json"}
 	ckey := "beypazarifan"
-	// cwd, _ := os.Getwd()
-	// fmt.Println("Current working directory:", cwd)
-	results, err := parser.FilterByCkey("attack.log.json", ckey)
+	opts := parser.FilterOptions{
+		CleanMobIds: true}
+	// =============================
+
+	results, err := parser.FilterByCkey(filenames, ckey, opts)
 	if err != nil {
 		fmt.Println("Error filtering logs:", err)
 		return

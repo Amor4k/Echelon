@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -14,33 +15,30 @@ const banner = `
                   ██╔══╝  ██║     ██╔══██║██╔══╝  ██║     ██║   ██║██║╚██╗██║
                   ███████╗╚██████╗██║  ██║███████╗███████╗╚██████╔╝██║ ╚████║
                   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝
-
-
-
-                                                                                                    
-                                                  @@@@@@@@@@@@@@@@@@@@@                             
-                                      @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@                   
-                              @@@@@@@@@@@@@@@@@@@@@      @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@             
-                        @@@@@@@@@@@@@         @@@@@       @@   @@@@@@@@@@   @@@@@@@@@@@@@@          
-                    @@@@@@@@@               @@@@@@             @@@@@@@@@@@        @@@@@@@@@@@       
-               @@@@@@@@                    @@@@@@@           @@@@@@@@@@@@@@           @@@@@@@@@     
-            @@@@@@                        @@@@@@@@          @@@@@@@@@@@@@@@@             @@@@@@@@   
-         @@@@@                            @@@@@@@@@@    @@@ @@@@@@@@@@@@@@@@                @@@@@@  
-      @@@@                                @@@@@@@@@@@  @@@@@@@@@@@@@@@@@@@@@@                @@@@@@ 
-    @@@                                  @@@@@@@@@@@@@    @@@@@@@@@@@@@@@@@@@                 @@@@@ 
-  @@                                     @@@@@@@@@@@@@@@@@ @@@@@@@@@@@@@@@@@@                  @@@@ 
- @                                        @@@@@@@@@@@@@@@@@@@@       @@@@@@@@                  @@@@ 
-                                          @@@@@@@@@@@@@@@@@@@            @@@                   @@@  
-                                           @@@@@@@@@@@@@@@@@@           @@@@                  @@@   
-                                            @@@@@@@@@@@@@@@@@@         @@@@                   @@    
-                                             @@@@@@@@@@@@@@@@@@@      @@@@                  @@      
-                                              @@@@@@@@@@@@@@@@@@    @@@@                            
-                                                @@@@@@@@@@@@@@@   @@@@                              
-                                                   @@@@@@@@@@@@ @@@@                                
-                                                        @@@@@@                                      
-                                                                                                    
-
 `
+
+//                                                   @@@@@@@@@@@@@@@@@@@@@
+//                                       @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+//                               @@@@@@@@@@@@@@@@@@@@@      @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+//                         @@@@@@@@@@@@@         @@@@@       @@   @@@@@@@@@@   @@@@@@@@@@@@@@
+//                     @@@@@@@@@               @@@@@@             @@@@@@@@@@@        @@@@@@@@@@@
+//                @@@@@@@@                    @@@@@@@           @@@@@@@@@@@@@@           @@@@@@@@@
+//             @@@@@@                        @@@@@@@@          @@@@@@@@@@@@@@@@             @@@@@@@@
+//          @@@@@                            @@@@@@@@@@    @@@ @@@@@@@@@@@@@@@@                @@@@@@
+//       @@@@                                @@@@@@@@@@@  @@@@@@@@@@@@@@@@@@@@@@                @@@@@@
+//     @@@                                  @@@@@@@@@@@@@    @@@@@@@@@@@@@@@@@@@                 @@@@@
+//   @@                                     @@@@@@@@@@@@@@@@@ @@@@@@@@@@@@@@@@@@                  @@@@
+//  @                                        @@@@@@@@@@@@@@@@@@@@       @@@@@@@@                  @@@@
+//                                           @@@@@@@@@@@@@@@@@@@            @@@                   @@@
+//                                            @@@@@@@@@@@@@@@@@@           @@@@                  @@@
+//                                             @@@@@@@@@@@@@@@@@@         @@@@                   @@
+//                                              @@@@@@@@@@@@@@@@@@@      @@@@                  @@
+//                                               @@@@@@@@@@@@@@@@@@    @@@@
+//                                                 @@@@@@@@@@@@@@@   @@@@
+//                                                    @@@@@@@@@@@@ @@@@
+//                                                         @@@@@@
+
+// `
 
 func main() {
 	fmt.Print(banner)
@@ -48,22 +46,47 @@ func main() {
 
 	//This part is for testing the parser. Will implement CLI/UI options later.
 	//==============================
-	filenames := []string{"attack.log.json", "game.log.json"}
-	ckey := "beypazarifan"
-	opts := parser.FilterOptions{
-		CleanMobIds: true}
+	// filenames := []string{"attack.log.json", "game.log.json"}
+	// ckey := "beypazarifan"
+	// opts := parser.FilterOptions{
+	// 	CleanMobIds: true}
 	// =============================
 
-	results, err := parser.FilterByCkey(filenames, ckey, opts)
+	//CLI Input flag handler
+	//========================
+	ckey := flag.String("ckey", "", "Player ckey to filter")
+	cleanMobIds := flag.Bool("clean-mob-ids", true, "Remove mob IDs from output")
+	flag.Parse()
+	logFiles := flag.Args()
+
+	if *ckey == "" {
+		fmt.Println("Error: Please provide a ckey using the --ckey flag.")
+		flag.PrintDefaults()
+		return
+	}
+
+	if len(logFiles) == 0 {
+		fmt.Println("Error: Please provide atr least one log file.")
+		flag.PrintDefaults()
+		return
+	}
+
+	//========================
+
+	opts := parser.FilterOptions{
+		CleanMobIds: *cleanMobIds,
+	}
+
+	results, err := parser.FilterByCkey(logFiles, *ckey, opts)
 	if err != nil {
 		fmt.Println("Error filtering logs:", err)
 		return
 	}
 
-	fmt.Printf("Found %d log entries for ckey %s\n", len(results), ckey)
+	fmt.Printf("Found %d log entries for ckey %s\n", len(results), *ckey)
 
 	//Write results to output file
-	outputFile, err := os.Create("filtered_" + ckey + ".log")
+	outputFile, err := os.Create("filtered_" + *ckey + ".log")
 	if err != nil {
 		fmt.Println("Error creating output file:", err)
 		return
@@ -74,5 +97,5 @@ func main() {
 		fmt.Fprintf(outputFile, "[%s] %s\n", entry.Timestamp, entry.Message)
 	}
 
-	fmt.Printf("Results written to filtered_%s.log\n", ckey)
+	fmt.Printf("Results written to filtered_%s.log\n", *ckey)
 }

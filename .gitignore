@@ -2,3 +2,9 @@
 
 *.log
 *.log.json
+
+#Build files
+/bin/
+/build/
+*.exe
+*.out

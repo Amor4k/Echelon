@@ -18,37 +18,45 @@ const banner = `
 `
 
 func main() {
-	fmt.Print(banner)
-	fmt.Println("Welcome to Echelon - SS13 Log Analysis Tool")
-
-	//This part is for testing the parser. Will implement CLI/UI options later.
-	//==============================
-	// filenames := []string{"attack.log.json", "game.log.json"}
-	// ckey := "beypazarifan"
-	// opts := parser.FilterOptions{
-	// 	CleanMobIds: true}
-	// =============================
-
 	//CLI Input flag handler
 	//========================
 	ckey := flag.String("ckey", "", "Player ckey to filter")
 	cleanMobIds := flag.Bool("clean-mob-ids", true, "Remove mob IDs from output")
+	noBanner := flag.Bool("no-banner", false, "Disable Echelon banner display")
 	flag.Parse()
 	logFiles := flag.Args()
 
 	if *ckey == "" {
 		fmt.Println("Error: Please provide a ckey using the --ckey flag.")
 		flag.PrintDefaults()
-		return
+		os.Exit(1)
 	}
 
 	if len(logFiles) == 0 {
-		fmt.Println("Error: Please provide atr least one log file.")
+		fmt.Println("Error: Please provide at least one log file.")
 		flag.PrintDefaults()
-		return
+		os.Exit(1)
 	}
 
+	//If multiple logfiles, check if they are of the same round
+	if len(logFiles) > 1 {
+		if err := parser.ValidateRoundIDs(logFiles); err != nil {
+			fmt.Println("Warning: ", err)
+			fmt.Println("Continue anyway? (Y/n):")
+			var response string
+			fmt.Scanln(&response)
+			if response != "y" && response != "Y" {
+				fmt.Println("Aborted")
+				os.Exit(1)
+			}
+		}
+	}
 	//========================
+
+	if !*noBanner {
+		fmt.Print(banner)
+		fmt.Println("Welcome to Echelon - SS13 Log Analysis Tool")
+	}
 
 	opts := parser.FilterOptions{
 		CleanMobIds: *cleanMobIds,

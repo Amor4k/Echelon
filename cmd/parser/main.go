@@ -20,12 +20,18 @@ const banner = `
 func main() {
 	//CLI Input flag handler
 	//========================
+
+	//Flags
 	ckey := flag.String("ckey", "", "Player ckey to filter")
 	cleanMobIds := flag.Bool("clean-mob-ids", true, "Remove mob IDs from output")
 	noBanner := flag.Bool("no-banner", false, "Disable Echelon banner display")
+	afterMins := flag.Float64("after", -1, "Filter log after N minutes from roundstart")
+	beforeMins := flag.Float64("before", -1, "Filter logs before N minutes from round Start")
 	flag.Parse()
+	//Rest should be log files
 	logFiles := flag.Args()
 
+	//Validations
 	if *ckey == "" {
 		fmt.Println("Error: Please provide a ckey using the --ckey flag.")
 		flag.PrintDefaults()
@@ -57,9 +63,16 @@ func main() {
 		fmt.Print(banner)
 		fmt.Println("Welcome to Echelon - SS13 Log Analysis Tool")
 	}
-
 	opts := parser.FilterOptions{
 		CleanMobIds: *cleanMobIds,
+	}
+
+	//If timestamps were provided, they are >0; set ptrs only if >0 for time filtering.
+	if *afterMins > 0 {
+		opts.AfterMins = afterMins
+	}
+	if *beforeMins > 0 {
+		opts.BeforeMins = beforeMins
 	}
 
 	results, err := parser.FilterByCkey(logFiles, *ckey, opts)

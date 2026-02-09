@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 type LogEntry struct {
@@ -23,15 +24,18 @@ type LogEntry struct {
 // Filter config struct
 type FilterOptions struct {
 	CleanMobIds bool
+	AfterMins   *float64 //nil ptr == no filter
+	BeforeMins  *float64 //nil ptr == no filter
 }
 
 // I've noticed while filtering log entries that there is a mob number stated after the ckey ex: (mob_1234). This clutters the output, making it harder to read.
-// Going to remove mob numbers from the ckey entries using regexp. Might not be the best solution.
+// Going to remove mob numbers from the ckey entries using regex. Might not be the best solution.
 var mobPattern = regexp.MustCompile(`\(mob_\d+\)`)
 
 // Filters logs by given ckey. Returns slice of LogEntry and error if any.
 func FilterByCkey(filenames []string, ckey string, opts FilterOptions) ([]LogEntry, error) {
 	var allResults []LogEntry
+	var roundStartTime time.Time
 	for _, filename := range filenames {
 		// Open log files.
 		file, err := os.Open(filename)
@@ -39,6 +43,15 @@ func FilterByCkey(filenames []string, ckey string, opts FilterOptions) ([]LogEnt
 			return nil, fmt.Errorf("Failed to open file: %w", err)
 		}
 		//defer file.Close() commented this out because of multiple files.
+
+		// Get round start time if we need time filtering
+		if opts.AfterMins != nil || opts.BeforeMins != nil {
+			var err error
+			roundStartTime, err = GetRoundstartTime(filenames[0])
+			if err != nil {
+				return nil, fmt.Errorf("failed to get round start time: %w", err)
+			}
+		}
 
 		var results []LogEntry
 		scanner := bufio.NewScanner(file)
@@ -55,8 +68,30 @@ func FilterByCkey(filenames []string, ckey string, opts FilterOptions) ([]LogEnt
 			}
 
 			if strings.Contains(entry.Message, ckey) { //This could filter false positives, ex: ckey: ben, this also filters ckey: ruben. Need to improve later.
+
+				// Time filtering, if opted for. (pointers wont be nil if opted for)
+				if opts.AfterMins != nil || opts.BeforeMins != nil {
+					entryTime, err := ParseTimestamp(entry.Timestamp)
+					if err != nil {
+						continue
+					}
+
+					minutesElapsed := entryTime.Sub(roundStartTime).Minutes()
+
+					//Skips lines before the provided timestamp
+					if opts.AfterMins != nil && minutesElapsed < *opts.AfterMins {
+						continue
+					}
+
+					//Skips lines after the provided timestamp
+					if opts.BeforeMins != nil && minutesElapsed > *opts.BeforeMins {
+						continue
+					}
+				}
+
+				//Removes (mob_1234) from log entry for better legilbility, of opted for.
 				if opts.CleanMobIds {
-					entry.Message = mobPattern.ReplaceAllString(entry.Message, "") //REmoves (mob_1234) from log entry for better legilbility.
+					entry.Message = mobPattern.ReplaceAllString(entry.Message, "")
 				}
 				results = append(results, entry)
 			}
@@ -127,4 +162,52 @@ func ValidateRoundIDs(filenames []string) error {
 	}
 
 	return nil
+}
+
+//Helper functions to filter with given timespamps
+
+// Parses roundstart time from second line of log as relative start timestamp.
+func ParseTimestamp(ts string) (time.Time, error) {
+
+	//Passed value "2006-01-02 15:04:05.000" is apparently the standard (day 1 - month 2 - hour 3 - minute 4 - second 5 - year 6)
+	t, err := time.Parse("2006-01-02 15:04:05.000", ts)
+	if err == nil {
+		return t, err
+	}
+
+	//sometimes this doesn't work, we try parsing without miliseconds.
+	t, err = time.Parse("2006-01-02 15:04:05", ts)
+	if err == nil {
+		return t, err
+	}
+
+	//If both does not work, return error
+
+	return time.Time{}, fmt.Errorf("Unable to parse timestamp %s", ts)
+
+}
+
+// Gets the roundstart time from the first time stamp of the passed log file.
+func GetRoundstartTime(filename string) (time.Time, error) {
+
+	file, err := os.Open(filename)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	if scanner.Scan() {
+		//skip to the second line for the first timestamp
+		if scanner.Scan() {
+			var entry LogEntry
+			if err := json.Unmarshal([]byte(scanner.Text()), &entry); err == nil {
+				return ParseTimestamp(entry.Timestamp)
+			}
+		}
+	}
+
+	//If we reach here, we f'd up
+	return time.Time{}, fmt.Errorf("Could not parse roundstart time from %s", filename)
 }

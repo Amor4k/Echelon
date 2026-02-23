@@ -8,5 +8,5 @@
 #Build files
 /bin/
 /build/
-*.exe
+#*.exe
 *.out

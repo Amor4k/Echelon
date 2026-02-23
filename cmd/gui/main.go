@@ -4,9 +4,7 @@ package main
 //Improvements/optimizations are welcome.
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -30,6 +28,7 @@ type LogAnalyzer struct {
 	cleanMobIDs   bool
 	afterMins     *float64
 	beforeMins    *float64
+	outputFormat  string
 	progressBar   *widget.ProgressBar
 	statusLabel   *widget.Label
 	fileListLabel *widget.Label
@@ -96,6 +95,10 @@ func main() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow("ECHELON - SS13 Log Analyzer")
 	dropZone := NewDropZone()
+
+	//Output selection
+	outputFormatSelect := widget.NewSelect([]string{"Readable Log (.log)", "JSON (.json)", "HTML (.html)"}, nil)
+	outputFormatSelect.SetSelected("Readable Log (.log)") //Default
 
 	analyzer := &LogAnalyzer{
 		cleanMobIDs: true,
@@ -229,6 +232,7 @@ func main() {
 	// Run button
 	runButton := widget.NewButton("Filter Logs", func() {
 		analyzer.ckey = strings.TrimSpace(ckeyEntry.Text)
+		analyzer.outputFormat = outputFormatSelect.Selected
 
 		if analyzer.ckey == "" {
 			dialog.ShowInformation("Error", "Please enter a ckey", myWindow)
@@ -307,6 +311,8 @@ func main() {
 		widget.NewSeparator(),
 		widget.NewLabel("Options:"),
 		cleanMobIDs,
+		widget.NewLabel("Output Format:"),
+		outputFormatSelect,
 
 		widget.NewSeparator(),
 		widget.NewLabel("Time Filtering (relative to round start):"),
@@ -391,7 +397,7 @@ func (a *LogAnalyzer) doFiltering(window fyne.Window) {
 	outputFile := a.getOutputPath()
 
 	// Write results to JSON file
-	err = a.writeResultsToFile(results, outputFile)
+	err = writeResultsToFile(results, outputFile, a.outputFormat, a.ckey)
 	if err != nil {
 		a.progressBar.Hide()
 		a.statusLabel.SetText("Error")
@@ -416,20 +422,18 @@ func (a *LogAnalyzer) getOutputPath() string {
 	}
 
 	timestamp := time.Now().Format("20060102_150405")
-	outputName := fmt.Sprintf("%s_%s_filtered.json", a.ckey, timestamp)
+
+	var ext string
+	switch a.outputFormat {
+	case "JSON (.json)":
+		ext = "json"
+	case "HTML (.html)":
+		ext = "html"
+	default:
+		ext = "log"
+	}
+
+	outputName := fmt.Sprintf("%s_%s_filtered.%s", a.ckey, timestamp, ext)
 
 	return filepath.Join(dir, outputName)
-}
-
-func (a *LogAnalyzer) writeResultsToFile(results []parser.LogEntry, outputPath string) error {
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-
-	return encoder.Encode(results)
 }

@@ -1,5 +1,8 @@
 package main
 
+//I have no idea about GUI's so we are vibecoding this bitch!
+//Improvements/optimizations are welcome.
+
 import (
 	"encoding/json"
 	"fmt"
@@ -12,9 +15,11 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -30,14 +35,112 @@ type LogAnalyzer struct {
 	fileListLabel *widget.Label
 }
 
+type DropZone struct {
+	box       *fyne.Container
+	label     *widget.Label
+	rect      *canvas.Rectangle
+	isHovered bool
+}
+
+func NewDropZone() *DropZone {
+	label := widget.NewLabel("Drag & drop log files here")
+	label.Alignment = fyne.TextAlignCenter
+
+	rect := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+	rect.CornerRadius = 5
+	rect.StrokeWidth = 2
+	rect.StrokeColor = theme.Color(theme.ColorNamePrimary)
+
+	box := container.NewVBox(
+		widget.NewSeparator(),
+		label,
+		widget.NewSeparator(),
+	)
+
+	box.Resize(fyne.NewSize(400, 60))
+
+	return &DropZone{
+		box:   box,
+		label: label,
+		rect:  rect,
+	}
+}
+
+func (d *DropZone) SetHovered(hovered bool) {
+	d.isHovered = hovered
+	if hovered {
+		d.rect.FillColor = theme.Color(theme.ColorNameHover)
+		d.label.SetText("Drop files here.")
+	} else {
+		d.rect.FillColor = theme.Color(theme.ColorNameInputBackground)
+		d.label.SetText("Drag & drop log files here")
+	}
+	d.rect.Refresh()
+	d.label.Refresh()
+}
+
+func (d *DropZone) Highlight() {
+	d.rect.FillColor = theme.Color(theme.ColorNameSuccess)
+	d.label.SetText("Files added!")
+	d.rect.Refresh()
+	d.label.Refresh()
+
+	time.AfterFunc(800*time.Millisecond, func() {
+		fyne.Do(func() {
+			d.SetHovered(false)
+		})
+	})
+}
+
 func main() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow("ECHELON - SS13 Log Analyzer")
+	dropZone := NewDropZone()
 
 	analyzer := &LogAnalyzer{
 		cleanMobIDs: true,
 		inputFiles:  []string{},
 	}
+
+	iconSource, err := fyne.LoadResourceFromPath("cmd/gui/icon.png")
+	if err == nil {
+		myApp.SetIcon((iconSource))
+	}
+
+	//Drag & Drop handling
+
+	myWindow.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
+		hasNewFiles := false
+
+		for _, uri := range uris {
+			path := uri.Path()
+			ext := strings.ToLower(filepath.Ext(path))
+
+			if ext != ".log" && ext != ".txt" && ext != ".json" {
+				continue
+			}
+
+			// dedupe
+			exists := false
+			for _, f := range analyzer.inputFiles {
+				if f == path {
+					exists = true
+					break
+				}
+			}
+
+			if !exists {
+				analyzer.inputFiles = append(analyzer.inputFiles, path)
+				hasNewFiles = true
+			}
+		}
+
+		if hasNewFiles {
+			dropZone.Highlight()
+		}
+
+		analyzer.updateFileList()
+	})
 
 	// Input fields
 	ckeyEntry := widget.NewEntry()
@@ -192,6 +295,7 @@ func main() {
 
 		widget.NewSeparator(),
 		widget.NewLabel("Log Files:"),
+		dropZone.box,
 		fileButtonsBox,
 		analyzer.fileListLabel,
 

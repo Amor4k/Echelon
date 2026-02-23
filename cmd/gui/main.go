@@ -345,14 +345,18 @@ func (a *LogAnalyzer) updateFileList() {
 }
 
 func (a *LogAnalyzer) processFiles(window fyne.Window) {
-	a.progressBar.Show()
-	a.statusLabel.SetText("Validating round IDs...")
+	fyne.Do(func() {
+		a.progressBar.Show()
+		a.statusLabel.SetText("Validating round IDs...")
+	})
 
 	// Validate round IDs
 	err := parser.ValidateRoundIDs(a.inputFiles)
 	if err != nil {
-		a.progressBar.Hide()
-		a.statusLabel.SetText("Ready")
+		fyne.Do(func() {
+			a.progressBar.Hide()
+			a.statusLabel.SetText("Ready")
+		})
 
 		// Show warning and ask to continue
 		dialog.ShowConfirm("Round ID Mismatch",
@@ -371,8 +375,10 @@ func (a *LogAnalyzer) processFiles(window fyne.Window) {
 }
 
 func (a *LogAnalyzer) doFiltering(window fyne.Window) {
-	a.progressBar.SetValue(0.3)
-	a.statusLabel.SetText("Filtering logs...")
+	fyne.Do(func() {
+		a.progressBar.SetValue(0.3)
+		a.statusLabel.SetText("Filtering logs...")
+	})
 
 	// Create filter options
 	opts := parser.FilterOptions{
@@ -384,14 +390,19 @@ func (a *LogAnalyzer) doFiltering(window fyne.Window) {
 	// Filter using the parser
 	results, err := parser.FilterByCkey(a.inputFiles, a.ckey, opts)
 	if err != nil {
-		a.progressBar.Hide()
-		a.statusLabel.SetText("Error")
-		dialog.ShowError(fmt.Errorf("Filtering failed: %v", err), window)
+		fyne.Do(func() {
+			a.progressBar.Hide()
+			a.statusLabel.SetText("Error")
+			dialog.ShowError(fmt.Errorf("Filtering failed: %v", err), window)
+		})
+
 		return
 	}
 
-	a.progressBar.SetValue(0.7)
-	a.statusLabel.SetText(fmt.Sprintf("Writing %d results to file...", len(results)))
+	fyne.Do(func() {
+		a.progressBar.SetValue(0.7)
+		a.statusLabel.SetText(fmt.Sprintf("Writing %d results to file...", len(results)))
+	})
 
 	// Determine output file path
 	outputFile := a.getOutputPath()
@@ -399,20 +410,25 @@ func (a *LogAnalyzer) doFiltering(window fyne.Window) {
 	// Write results to JSON file
 	err = writeResultsToFile(results, outputFile, a.outputFormat, a.ckey)
 	if err != nil {
-		a.progressBar.Hide()
-		a.statusLabel.SetText("Error")
-		dialog.ShowError(fmt.Errorf("Failed to write output: %v", err), window)
+		fyne.Do(func() {
+			a.progressBar.Hide()
+			a.statusLabel.SetText("Error")
+			dialog.ShowError(fmt.Errorf("Failed to write output: %v", err), window)
+		})
+
 		return
 	}
 
-	a.progressBar.SetValue(1.0)
-	a.progressBar.Hide()
-	a.statusLabel.SetText("Complete!")
+	fyne.Do(func() {
+		a.progressBar.SetValue(1.0)
+		a.progressBar.Hide()
+		a.statusLabel.SetText("Complete!")
+		// Show success dialog
+		successMsg := fmt.Sprintf("Successfully filtered %d log entries!\n\nOutput saved to:\n%s",
+			len(results), outputFile)
+		dialog.ShowInformation("Success", successMsg, window)
+	})
 
-	// Show success dialog
-	successMsg := fmt.Sprintf("Successfully filtered %d log entries!\n\nOutput saved to:\n%s",
-		len(results), outputFile)
-	dialog.ShowInformation("Success", successMsg, window)
 }
 
 func (a *LogAnalyzer) getOutputPath() string {

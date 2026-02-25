@@ -23,19 +23,95 @@ type LogEntry struct {
 
 // Filter config struct
 type FilterOptions struct {
-	CleanMobIds bool
-	AfterMins   *float64 //nil ptr == no filter
-	BeforeMins  *float64 //nil ptr == no filter
+	CleanMobIds       bool
+	AfterMins         *float64 //nil ptr == no filter
+	BeforeMins        *float64 //nil ptr == no filter
+	SecondCkey        string
+	InteractionWindow float64 //Default 5.0 (minutes)
 }
 
 // I've noticed while filtering log entries that there is a mob number stated after the ckey ex: (mob_1234). This clutters the output, making it harder to read.
 // Going to remove mob numbers from the ckey entries using regex. Might not be the best solution.
 var mobPattern = regexp.MustCompile(`\(mob_\d+\)`)
 
+// isNearAnyTime checks if t is within windowMinutes of any time in the list
+func isNearAnyTime(t time.Time, times []time.Time, windowMinutes float64) bool {
+	for _, otherTime := range times {
+		diff := t.Sub(otherTime).Minutes()
+		if diff < 0 {
+			diff = -diff //abs
+		}
+		if diff <= windowMinutes {
+			return true
+		}
+	}
+	return false
+}
+
+func filterInteractions(entries []LogEntry, ckey1 string, ckey2 string, windowMinutes float64) ([]LogEntry, error) {
+	if windowMinutes == 0 {
+		windowMinutes = 5.0 //Default time window is 5 minutes
+	}
+
+	var player1Times []time.Time
+	var player2Times []time.Time
+
+	//First pass: collect timestamps for each player
+	for _, entry := range entries {
+		if strings.Contains(entry.Message, ckey1) {
+			t, err := ParseTimestamp(entry.Timestamp)
+			if err == nil {
+				player1Times = append(player1Times, t)
+			}
+		}
+		if strings.Contains(entry.Message, ckey2) {
+			t, err := ParseTimestamp(entry.Timestamp)
+			if err == nil {
+				player2Times = append(player2Times, t)
+			}
+		}
+	}
+
+	//Second pass: include entries near interaction times
+	var results []LogEntry
+	for _, entry := range entries {
+		entryTime, err := ParseTimestamp(entry.Timestamp)
+		if err != nil {
+			continue
+		}
+
+		//Check if entry involves either player
+		hasPlayer1 := strings.Contains(entry.Message, ckey1)
+		hasPlayer2 := strings.Contains(entry.Message, ckey2)
+
+		if !hasPlayer1 && !hasPlayer2 {
+			//neither player involved, skip
+			continue
+		}
+		//Check if the other player was active nearby in time
+		if hasPlayer1 && isNearAnyTime(entryTime, player2Times, windowMinutes) {
+			results = append(results, entry)
+		} else if hasPlayer2 && isNearAnyTime(entryTime, player1Times, windowMinutes) {
+			results = append(results, entry)
+		}
+	}
+	return results, nil
+}
+
 // Filters logs by given ckey. Returns slice of LogEntry and error if any.
 func FilterByCkey(filenames []string, ckey string, opts FilterOptions) ([]LogEntry, error) {
 	var allResults []LogEntry
 	var roundStartTime time.Time
+
+	// Get round start time if we need time filtering
+	if opts.AfterMins != nil || opts.BeforeMins != nil {
+		var err error
+		roundStartTime, err = GetRoundstartTime(filenames[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to get round start time: %w", err)
+		}
+	}
+
 	for _, filename := range filenames {
 		// Open log files.
 		file, err := os.Open(filename)
@@ -43,15 +119,6 @@ func FilterByCkey(filenames []string, ckey string, opts FilterOptions) ([]LogEnt
 			return nil, fmt.Errorf("Failed to open file: %w", err)
 		}
 		//defer file.Close() commented this out because of multiple files.
-
-		// Get round start time if we need time filtering
-		if opts.AfterMins != nil || opts.BeforeMins != nil {
-			var err error
-			roundStartTime, err = GetRoundstartTime(filenames[0])
-			if err != nil {
-				return nil, fmt.Errorf("failed to get round start time: %w", err)
-			}
-		}
 
 		var results []LogEntry
 		scanner := bufio.NewScanner(file)
@@ -66,51 +133,68 @@ func FilterByCkey(filenames []string, ckey string, opts FilterOptions) ([]LogEnt
 			if err != nil {
 				continue
 			}
-
-			if strings.Contains(entry.Message, ckey) { //This could filter false positives, ex: ckey: ben, this also filters ckey: ruben. Need to improve later.
-
-				// Time filtering, if opted for. (pointers wont be nil if opted for)
-				if opts.AfterMins != nil || opts.BeforeMins != nil {
-					entryTime, err := ParseTimestamp(entry.Timestamp)
-					if err != nil {
-						continue
-					}
-
-					minutesElapsed := entryTime.Sub(roundStartTime).Minutes()
-
-					//Skips lines before the provided timestamp
-					if opts.AfterMins != nil && minutesElapsed < *opts.AfterMins {
-						continue
-					}
-
-					//Skips lines after the provided timestamp
-					if opts.BeforeMins != nil && minutesElapsed > *opts.BeforeMins {
-						continue
-					}
+			//If interaction filtering is enabled, check for second ckey.
+			if opts.SecondCkey != "" {
+				if strings.Contains(entry.Message, ckey) || strings.Contains(entry.Message, opts.SecondCkey) {
+					results = append(results, entry)
 				}
-
-				//Removes (mob_1234) from log entry for better legilbility, of opted for.
-				if opts.CleanMobIds {
-					entry.Message = mobPattern.ReplaceAllString(entry.Message, "")
+			} else {
+				if strings.Contains(entry.Message, ckey) {
+					results = append(results, entry)
 				}
-				results = append(results, entry)
 			}
-
 		}
 
 		if err := scanner.Err(); err != nil {
+			file.Close()
 			return nil, fmt.Errorf("Error reading file: %w", err)
 		}
+
 		file.Close()
-		// Append results from this file to allResults
 		allResults = append(allResults, results...)
 	}
 
+	if opts.SecondCkey != "" {
+		var err error
+		allResults, err = filterInteractions(allResults, ckey, opts.SecondCkey, opts.InteractionWindow)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	//Apply time filtering
+	if opts.AfterMins != nil || opts.BeforeMins != nil {
+		var filtered []LogEntry
+		for _, entry := range allResults {
+			entryTime, err := ParseTimestamp(entry.Timestamp)
+			if err != nil {
+				continue
+			}
+
+			minutesElapsed := entryTime.Sub(roundStartTime).Minutes()
+
+			if opts.AfterMins != nil && minutesElapsed < *opts.AfterMins {
+				continue
+			}
+
+			if opts.BeforeMins != nil && minutesElapsed > *opts.BeforeMins {
+				filtered = append(filtered, entry)
+			}
+		}
+		allResults = filtered
+	}
+
+	//Clean mob IDs
+	if opts.CleanMobIds {
+		for i := range allResults {
+			allResults[i].Message = mobPattern.ReplaceAllString(allResults[i].Message, "")
+		}
+	}
+
+	//Sort chronologically
 	sort.Slice(allResults, func(i, j int) bool {
 		return allResults[i].Timestamp < allResults[j].Timestamp
 	})
-
-	// Return result slice and error if any.
 	return allResults, nil
 }
 

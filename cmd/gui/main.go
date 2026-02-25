@@ -22,16 +22,18 @@ import (
 )
 
 type LogAnalyzer struct {
-	ckey          string
-	inputFiles    []string
-	outputDir     string
-	cleanMobIDs   bool
-	afterMins     *float64
-	beforeMins    *float64
-	outputFormat  string
-	progressBar   *widget.ProgressBar
-	statusLabel   *widget.Label
-	fileListLabel *widget.Label
+	ckey              string
+	secondCkey        string
+	interactionWindow float64
+	inputFiles        []string
+	outputDir         string
+	cleanMobIDs       bool
+	afterMins         *float64
+	beforeMins        *float64
+	outputFormat      string
+	progressBar       *widget.ProgressBar
+	statusLabel       *widget.Label
+	fileListLabel     *widget.Label
 }
 
 type DropZone struct {
@@ -149,6 +151,28 @@ func main() {
 	ckeyEntry := widget.NewEntry()
 	ckeyEntry.SetPlaceHolder("Enter ckey(s)")
 
+	//Interaction filtering between 2 players(ckeys)
+	interactionWindowEntry := widget.NewEntry()
+	interactionWindowEntry.SetPlaceHolder("5.0")
+	interactionWindowEntry.SetText("5.0")
+	interactionWindowEntry.Disable()
+
+	enableInteractionFilter := widget.NewCheck("Find interactions with another player", nil)
+
+	ckeyEntry2 := widget.NewEntry()
+	ckeyEntry2.SetPlaceHolder("Second player ckey")
+	ckeyEntry2.Disable()
+
+	enableInteractionFilter.OnChanged = func(checked bool) {
+		if checked {
+			ckeyEntry2.Enable()
+			interactionWindowEntry.Enable()
+		} else {
+			ckeyEntry2.Disable()
+			interactionWindowEntry.Disable()
+		}
+	}
+
 	// File list
 	analyzer.fileListLabel = widget.NewLabel("No files selected")
 	analyzer.fileListLabel.Wrapping = fyne.TextWrapWord
@@ -244,6 +268,14 @@ func main() {
 			return
 		}
 
+		//Interaction filtering
+		secondCkey := ""
+		if enableInteractionFilter.Checked {
+			secondCkey = strings.TrimSpace(ckeyEntry2.Text)
+		}
+
+		analyzer.secondCkey = secondCkey
+
 		// Parse time filters if enabled
 		analyzer.afterMins = nil
 		analyzer.beforeMins = nil
@@ -296,6 +328,10 @@ func main() {
 
 		widget.NewLabel("Player Ckey:"),
 		ckeyEntry,
+		enableInteractionFilter,
+		ckeyEntry2,
+		widget.NewLabel("Interaction time window (minutes):"),
+		interactionWindowEntry,
 
 		widget.NewSeparator(),
 		widget.NewLabel("Log Files:"),
@@ -385,6 +421,7 @@ func (a *LogAnalyzer) doFiltering(window fyne.Window) {
 		CleanMobIds: a.cleanMobIDs,
 		AfterMins:   a.afterMins,
 		BeforeMins:  a.beforeMins,
+		SecondCkey:  a.secondCkey,
 	}
 
 	// Filter using the parser

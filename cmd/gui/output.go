@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 
 	"github.com/Amor4k/Echelon/internal/parser"
@@ -112,12 +113,16 @@ func writeHTML(results []parser.LogEntry, outputPath string, ckey string) error 
 			categoryClass = "attack"
 		}
 
+		escapedMessage := html.EscapeString(entry.Message)
+		escapedTimestamp := html.EscapeString(entry.Timestamp)
+		escapedCategory := html.EscapeString(entry.Category)
+
 		fmt.Fprintf(file, `    <div class="log-entry">
         <span class="timestamp">%s</span>
         <span class="category %s">%s</span>
         <span class="message">%s</span>
     </div>
-`, entry.Timestamp, categoryClass, entry.Category, entry.Message)
+`, escapedTimestamp, categoryClass, escapedCategory, escapedMessage)
 	}
 
 	// HTML footer

@@ -94,7 +94,7 @@ func (d *DropZone) Highlight() {
 }
 
 func main() {
-	myApp := app.New()
+	myApp := app.NewWithID("com.amor4k.echelon")
 	myWindow := myApp.NewWindow("ECHELON - SS13 Log Analyzer")
 	dropZone := NewDropZone()
 
@@ -461,11 +461,17 @@ func (a *LogAnalyzer) doFiltering(window fyne.Window) {
 		a.progressBar.Hide()
 		a.statusLabel.SetText("Complete!")
 		// Show success dialog
-		successMsg := fmt.Sprintf("Successfully filtered %d log entries!\n\nOutput saved to:\n%s",
-			len(results), outputFile)
-		dialog.ShowInformation("Success", successMsg, window)
-	})
+		// successMsg := fmt.Sprintf("Successfully filtered %d log entries!\n\nOutput saved to:\n%s",
+		// 	len(results), outputFile)
+		// dialog.ShowInformation("Success", successMsg, window)
 
+		outputFile := a.getOutputPath()
+		roundID, err := parser.GetRoundID(a.inputFiles[0])
+		if err != nil {
+			roundID = "Unknown"
+		}
+		showLogEditor(results, a.ckey, roundID, outputFile, a.outputFormat, window)
+	})
 }
 
 func (a *LogAnalyzer) getOutputPath() string {

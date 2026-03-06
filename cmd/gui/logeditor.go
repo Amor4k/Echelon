@@ -23,6 +23,7 @@ type LogEditor struct {
 
 	pinnedContainer *fyne.Container
 	logsContainer   *fyne.Container
+	pinnedScroll    *container.Scroll
 }
 
 func showLogEditor(results []parser.LogEntry, ckey string, roundID string, outputPath string, outputFormat string, parentWindow fyne.Window) {
@@ -90,16 +91,25 @@ func (e *LogEditor) createPinnedSection() *fyne.Container {
 		pinnedEntries.Add(widget.NewLabel("No pinned logs yet"))
 	}
 
-	scroll := container.NewScroll(pinnedEntries)
-	scroll.SetMinSize(fyne.NewSize(0, 150)) //Fixed height for pinned section, might change later
+	e.pinnedScroll = container.NewScroll(pinnedEntries)
+	e.pinnedScroll.SetMinSize(fyne.NewSize(0, 150))
 
-	return container.NewBorder(
-		widget.NewLabelWithStyle("📌 Pinned Logs:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		nil,
-		nil,
-		nil,
-		scroll,
-	)
+	// Toggle button
+	toggleBtn := widget.NewButton("▼ Collapse", nil)
+	toggleBtn.OnTapped = func() {
+		if e.pinnedScroll.Visible() {
+			e.pinnedScroll.Hide()
+			toggleBtn.SetText("▶ Expand Pinned")
+		} else {
+			e.pinnedScroll.Show()
+			toggleBtn.SetText("▼ Collapse")
+		}
+	}
+
+	headerLabel := widget.NewLabelWithStyle("📌 Pinned Logs:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	header := container.NewBorder(nil, nil, headerLabel, toggleBtn, container.NewMax())
+
+	return container.NewBorder(header, nil, nil, nil, e.pinnedScroll)
 }
 
 // Pins Log entry, adds it to the pinned section
@@ -135,27 +145,98 @@ func (e *LogEditor) createPinnedLogEntry(index int, entry parser.LogEntry) *fyne
 }
 
 func (e *LogEditor) createLogsSection() *fyne.Container {
-	logEntries := container.NewVBox()
-
-	for i, entry := range e.results {
-		//skip delted entries
-		if e.deletedIndices[i] {
-			continue
+	// Get non-deleted entries
+	var displayIndices []int
+	for i := range e.results {
+		if !e.deletedIndices[i] {
+			displayIndices = append(displayIndices, i)
 		}
-
-		logEntries.Add(e.createLogEntry(i, entry))
 	}
 
-	//Wrap in a scroll container
-	scroll := container.NewScroll(logEntries)
+	list := widget.NewList(
+		func() int {
+			return len(displayIndices)
+		},
+		func() fyne.CanvasObject {
+			return e.createLogEntryTemplate()
+		},
+		func(id widget.ListItemID, item fyne.CanvasObject) {
+			e.updateLogEntry(displayIndices[id], item)
+		},
+	)
 
 	return container.NewBorder(
-		widget.NewLabel("All logs:"),
+		widget.NewLabel(fmt.Sprintf("All logs (%d entries):", len(displayIndices))),
 		nil,
 		nil,
 		nil,
-		scroll,
+		list,
 	)
+}
+
+func (e *LogEditor) createLogEntryTemplate() fyne.CanvasObject {
+	timestamp := widget.NewLabel("")
+	timestamp.TextStyle.Bold = true
+
+	category := widget.NewLabel("")
+
+	message := widget.NewLabel("")
+	message.Wrapping = fyne.TextWrapWord
+
+	pinBtn := widget.NewButton("📌", nil)
+	pinBtn.Importance = widget.LowImportance
+
+	deleteBtn := widget.NewButton("🗑️", nil)
+	deleteBtn.Importance = widget.DangerImportance
+
+	// Store widgets in a simple VBox for easy access
+	return container.NewVBox(
+		container.NewHBox(
+			timestamp,
+			category,
+			widget.NewLabel(""), // Spacer
+			pinBtn,
+			deleteBtn,
+		),
+		message,
+		widget.NewSeparator(),
+	)
+}
+
+func (e *LogEditor) updateLogEntry(index int, item fyne.CanvasObject) {
+	entry := e.results[index]
+
+	// Access the VBox container
+	vbox := item.(*fyne.Container)
+	headerRow := vbox.Objects[0].(*fyne.Container)
+	messageLabel := vbox.Objects[1].(*widget.Label)
+
+	// Access header widgets
+	timestamp := headerRow.Objects[0].(*widget.Label)
+	category := headerRow.Objects[1].(*widget.Label)
+	pinBtn := headerRow.Objects[3].(*widget.Button)
+	deleteBtn := headerRow.Objects[4].(*widget.Button)
+
+	// Update content
+	timestamp.SetText("[" + entry.Timestamp + "]")
+	category.SetText("[" + entry.Category + "]")
+	messageLabel.SetText(entry.Message)
+
+	// Update button callbacks
+	pinBtn.OnTapped = func() {
+		e.togglePin(index)
+	}
+
+	deleteBtn.OnTapped = func() {
+		e.deleteLog(index)
+	}
+
+	// Update pin button text if already pinned
+	if e.pinnedIndices[index] {
+		pinBtn.SetText("✓ Pinned")
+	} else {
+		pinBtn.SetText("📌 Pin")
+	}
 }
 
 func (e *LogEditor) createLogEntry(index int, entry parser.LogEntry) *fyne.Container {
